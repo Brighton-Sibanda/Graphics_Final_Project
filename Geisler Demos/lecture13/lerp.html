@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- Load the JavaScript function "main" stored in the loaded file below -->
+
+<body onload="main()">
+    <!-- WebGL Utility Scripts -->
+    <script src="lib/webgl-utils.js"></script>
+    <script src="lib/webgl-debug.js"></script>
+    <script src="lib/cuon-utils.js"></script>
+    <script src="lib/cuon-matrix-quat03.js"></script>
+
+    <!-- Select a JavaScript file -->
+    <script src="lerp.js"></script>
+
+    <!-- Setup the Canvas -->
+    <p>
+        <canvas id="canvas" width="400" height="400">
+            Please use a browser that supports "canvas"
+        </canvas>
+    </p>
+
+    <!-- Add a slider -->
+    <div>
+        <input type="range" id="alpha" min="0" max="1" step=".01" />
+        <label id="sliderLabel" for="alpha"></label>
+    </div>
+
+</body>
+
+</html>

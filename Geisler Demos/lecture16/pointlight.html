@@ -1,0 +1,66 @@
+<!-- Last edited by Dietrich Geisler 2025 -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<header>
+    <!-- Sets an icon for the page -->
+    <link rel="icon" type="image/x-icon" href="/resources/favicon.ico">
+</header>
+
+<body onload="main()">
+    <!-- WebGL Utility Scripts -->
+    <script src="lib/webgl-utils.js"></script>
+    <script src="lib/webgl-debug.js"></script>
+    <script src="lib/cuon-utils.js"></script>
+    <script src="lib/cuon-matrix-quat03.js"></script>
+
+    <!-- Select a JavaScript file -->
+    <script src="pointlight.js"></script>
+
+    <!-- Setup the Canvas -->
+    <canvas id="canvas" width="400" height="400">
+        Please use a browser that supports "canvas"
+    </canvas>
+
+    <!-- Explanation of camera controls -->
+    <p>
+        Controls for camera movement: 
+        WASD forward/backward/left/right, R to go up, and F to go down
+    </p>
+
+    <!-- Sliders for light position -->
+    <div>
+        <input type="range" id="sliderX" min="-8" max="8" step=".01" value="0"/>
+        <label id="lightX" for="sliderX"></label>
+    </div>
+    <div>
+        <input type="range" id="sliderY" min="-8" max="8" step=".01" value="0"/>
+        <label id="lightY" for="sliderY"></label>
+    </div>
+    <div>
+        <input type="range" id="sliderZ" min="-8" max="8" step=".01" value="2"/>
+        <label id="lightZ" for="sliderZ"></label>
+    </div>
+
+    <!-- Sliders for extra information -->
+    <div>
+        <input type="range" id="sliderPower" min="1" max="32" step="1" value="16"/>
+        <label id="specPower" for="sliderPower"></label>
+    </div>
+    <div>
+        <input type="range" id="sliderConstant" min="0" max="4" step=".1" value="1"/>
+        <label id="constant" for="sliderConstant"></label>
+    </div>
+    <div>
+        <input type="range" id="sliderLinear" min="0" max="1" step=".01" value=".1"/>
+        <label id="linear" for="sliderLinear"></label>
+    </div>
+    <div>
+        <input type="range" id="sliderQuadratic" min="0" max="1" step=".001" value=".1"/>
+        <label id="quadratic" for="sliderQuadratic"></label>
+    </div>
+
+</body>
+
+</html>
