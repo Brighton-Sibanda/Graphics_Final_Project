@@ -56,8 +56,10 @@ import {
   // Texture images
   var g_cubeImage
   var g_gridImage
+  var g_cloudImage
   var g_cubeTexturePointer
   var g_gridTexturePointer
+  var g_cloudTexturePointer // Added for cloud texture
   
   // Light position
   var g_lightPosition
@@ -73,6 +75,8 @@ import {
   var g_treeMesh // Added for tree
   var g_cloudMeshes = [] // Added for clouds
   var g_cloudMatrices = [] // Added for cloud transformations
+  var g_cloudTexCoords = [] // Added for cloud texture coordinates
+  var g_cloudNormals = []
   
   ///// extras
   var slider_input
@@ -124,23 +128,23 @@ import {
       }
       return power
     }
-    
+  
     const width = nextPowerOf2(image.width)
     const height = nextPowerOf2(image.height)
-    
+  
     // Create a canvas of power-of-two size
-    const canvas = document.createElement('canvas')
+    const canvas = document.createElement("canvas")
     canvas.width = width
     canvas.height = height
-    const ctx = canvas.getContext('2d')
-    
+    const ctx = canvas.getContext("2d")
+  
     // Fill the canvas by repeating the image
-    const pattern = ctx.createPattern(image, 'repeat')
+    const pattern = ctx.createPattern(image, "repeat")
     ctx.fillStyle = pattern
     ctx.fillRect(0, 0, width, height)
-    
+  
     console.log(`Converted texture from ${image.width}x${image.height} to ${width}x${height}`)
-    
+  
     return canvas
   }
   
@@ -148,15 +152,24 @@ import {
     g_cubeImage = new Image()
     g_cubeImage.src = "./resources/textures/brick_resized.png"
     await g_cubeImage.decode()
-    
+  
     // Load the grid texture
     const tempImage = new Image()
     tempImage.src = "./resources/mountain/ground_grass_3264_4062_Small.jpg" // Make sure this path is correct
     tempImage.crossOrigin = "anonymous" // Add this to prevent CORS issues
     await tempImage.decode()
-    
+  
     // Convert to power-of-two texture
     g_gridImage = createPowerOfTwoTexture(tempImage)
+  
+    // Load the cloud texture - use a more suitable cloud texture with soft edges
+    const cloudTempImage = new Image()
+    cloudTempImage.src = "./resources/clouds/cloud.png" // Update this path to your cloud texture
+    cloudTempImage.crossOrigin = "anonymous"
+    await cloudTempImage.decode()
+  
+    // Convert to power-of-two texture
+    g_cloudImage = createPowerOfTwoTexture(cloudTempImage)
   
     loadGLSLFiles()
   }
@@ -173,6 +186,7 @@ import {
     loadOBJFiles()
   }
   
+  // Update the loadOBJFiles function to ensure normals are properly processed
   async function loadOBJFiles() {
     // Load the tree model
     const treeData = await fetch("./resources/low_poly_tree/Lowpoly_tree_sample.obj").then((response) => response.text())
@@ -180,26 +194,116 @@ import {
     g_treeMesh = []
     readObjFile(treeData, g_treeMesh)
   
-    // Load cloud models
+    // Load cloud models from the new path
     const cloudFiles = [
-      "./resources/clouds/cumulus00.obj",
-      "./resources/clouds/cumulus01.obj",
-      "./resources/clouds/cumulus02.obj",
-      "./resources/clouds/altostratus00.obj",
-      "./resources/clouds/altostratus01.obj",
+      "./resources/cloudOBJ/CloudSmall.obj",
+      "./resources/cloudOBJ/CloudMedium.obj",
+      "./resources/cloudOBJ/CloudLarge.obj",
+      "./resources/cloudOBJ/CloudLong.obj",
+      "./resources/cloudOBJ/CloudSmall2.obj",
     ]
   
-    // Load each cloud model
+    // Clear previous cloud data
+    g_cloudMeshes = []
+    g_cloudNormals = []
+    g_cloudTexCoords = []
+  
+    // Load each cloud model with its texture coordinates and normals
     for (const cloudFile of cloudFiles) {
       const cloudData = await fetch(cloudFile).then((response) => response.text())
+  
       const cloudMesh = []
-      readObjFile(cloudData, cloudMesh)
+      const cloudNormals = []
+      const cloudTexCoords = []
+  
+      // Use the readObjFile function to parse the OBJ file with texture coordinates and normals
+      readObjFile(cloudData, cloudMesh, cloudNormals, cloudTexCoords)
+  
+      // Ensure normals are properly set for smooth shading
+      // If the model doesn't have enough normals, we'll generate smooth normals
+      if (cloudNormals.length < cloudMesh.length) {
+        console.log(`Generating smooth normals for ${cloudFile}`)
+        const smoothNormals = generateSmoothNormals(cloudMesh)
+        g_cloudNormals.push(smoothNormals)
+      } else {
+        g_cloudNormals.push(cloudNormals)
+      }
+  
       g_cloudMeshes.push(cloudMesh)
+      g_cloudTexCoords.push(cloudTexCoords)
     }
   
     startRendering()
   }
   
+  // Add a function to generate smooth normals for cloud meshes
+  function generateSmoothNormals(mesh) {
+    const normals = []
+    const vertexCount = mesh.length / 3
+  
+    // Create a map to store accumulated normals for each vertex position
+    const vertexNormals = new Map()
+  
+    // Process each triangle
+    for (let i = 0; i < vertexCount; i += 3) {
+      // Get the three vertices of the triangle
+      const v1 = [mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2]]
+      const v2 = [mesh[(i + 1) * 3], mesh[(i + 1) * 3 + 1], mesh[(i + 1) * 3 + 2]]
+      const v3 = [mesh[(i + 2) * 3], mesh[(i + 2) * 3 + 1], mesh[(i + 2) * 3 + 2]]
+  
+      // Calculate the face normal using cross product
+      const edge1 = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]]
+      const edge2 = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]]
+      const normal = [
+        edge1[1] * edge2[2] - edge1[2] * edge2[1],
+        edge1[2] * edge2[0] - edge1[0] * edge2[2],
+        edge1[0] * edge2[1] - edge1[1] * edge2[0],
+      ]
+  
+      // Normalize the normal
+      const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
+      if (length > 0) {
+        normal[0] /= length
+        normal[1] /= length
+        normal[2] /= length
+      }
+  
+      // Add this normal to each vertex of the triangle
+      for (let j = 0; j < 3; j++) {
+        const vertexKey = `${mesh[(i + j) * 3]},${mesh[(i + j) * 3 + 1]},${mesh[(i + j) * 3 + 2]}`
+        if (!vertexNormals.has(vertexKey)) {
+          vertexNormals.set(vertexKey, [normal[0], normal[1], normal[2]])
+        } else {
+          const existingNormal = vertexNormals.get(vertexKey)
+          existingNormal[0] += normal[0]
+          existingNormal[1] += normal[1]
+          existingNormal[2] += normal[2]
+          vertexNormals.set(vertexKey, existingNormal)
+        }
+      }
+    }
+  
+    // Normalize all accumulated normals
+    for (const [key, normal] of vertexNormals.entries()) {
+      const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
+      if (length > 0) {
+        normal[0] /= length
+        normal[1] /= length
+        normal[2] /= length
+      }
+    }
+  
+    // Create the final normals array in the same order as the vertices
+    for (let i = 0; i < vertexCount; i++) {
+      const vertexKey = `${mesh[i * 3]},${mesh[i * 3 + 1]},${mesh[i * 3 + 2]}`
+      const normal = vertexNormals.get(vertexKey) || [0, 1, 0] // Default to up if not found
+      normals.push(normal[0], normal[1], normal[2])
+    }
+  
+    return normals
+  }
+  
+  // Update the startRendering function to use the loaded normals and texture coordinates
   function startRendering() {
     // Initialize GPU's vertex and fragment shaders programs
     if (!initShaders(gl, g_vshader, g_fshader)) {
@@ -219,13 +323,10 @@ import {
     let allCloudTexCoords = []
   
     // Combine all cloud meshes into single arrays
-    for (const cloudMesh of g_cloudMeshes) {
-      allCloudVertices = allCloudVertices.concat(cloudMesh)
-      // Create dummy normals and texture coordinates for clouds
-      const cloudDummyNormals = Array(cloudMesh.length).fill(0)
-      const cloudDummyTexCoords = Array((cloudMesh.length / 3) * 2).fill(0)
-      allCloudNormals = allCloudNormals.concat(cloudDummyNormals)
-      allCloudTexCoords = allCloudTexCoords.concat(cloudDummyTexCoords)
+    for (let i = 0; i < g_cloudMeshes.length; i++) {
+      allCloudVertices = allCloudVertices.concat(g_cloudMeshes[i])
+      allCloudNormals = allCloudNormals.concat(g_cloudNormals[i])
+      allCloudTexCoords = allCloudTexCoords.concat(g_cloudTexCoords[i])
     }
   
     // Create dummy normals and texture coordinates for the tree
@@ -334,19 +435,31 @@ import {
     gl.bindTexture(gl.TEXTURE_2D, g_cubeTexturePointer)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, g_cubeImage)
     gl.generateMipmap(gl.TEXTURE_2D)
-    
+  
     // Create and set up the grid texture
     g_gridTexturePointer = gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, g_gridTexturePointer)
-    
+  
     // Use the canvas as the texture source
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, g_gridImage)
     gl.generateMipmap(gl.TEXTURE_2D)
-    
+  
     // Set texture parameters for better tiling
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  
+    // Create and set up the cloud texture
+    g_cloudTexturePointer = gl.createTexture()
+    gl.bindTexture(gl.TEXTURE_2D, g_cloudTexturePointer)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, g_cloudImage)
+    gl.generateMipmap(gl.TEXTURE_2D)
+  
+    // Set texture parameters for clouds - use LINEAR filtering for smoother appearance
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   }
   
@@ -354,33 +467,45 @@ import {
   function setupCloudMatrices() {
     // Position clouds at different locations in the sky
     g_cloudMatrices = [
-      // Cumulus clouds
+      // Small cloud
       new Matrix4()
-        .translate(-2, 7, -2)
-        .scale(0.03, 0.02, 0.03)
+        .translate(-3, 6, -3)
+        .scale(0.5, 0.3, 0.5)
         .rotate(30, 0, 1, 0),
-      new Matrix4().translate(2, 7.2, -1).scale(0.025, 0.015, 0.025).rotate(60, 0, 1, 0),
-      new Matrix4().translate(0, 7.1, -3).scale(0.035, 0.02, 0.035).rotate(15, 0, 1, 0),
-      // Altostratus clouds
+      // Medium cloud
       new Matrix4()
-        .translate(-3, 7.5, -4)
-        .scale(0.04, 0.01, 0.04)
+        .translate(2, 6.5, -2)
+        .scale(0.6, 0.4, 0.6)
+        .rotate(60, 0, 1, 0),
+      // Large cloud
+      new Matrix4()
+        .translate(0, 7, -4)
+        .scale(0.7, 0.5, 0.7)
+        .rotate(15, 0, 1, 0),
+      // Long cloud
+      new Matrix4()
+        .translate(-4, 7.2, -5)
+        .scale(0.8, 0.3, 0.6)
         .rotate(45, 0, 1, 0),
-      new Matrix4().translate(3, 7.4, -3).scale(0.045, 0.01, 0.045).rotate(75, 0, 1, 0),
-      // Additional clouds
+      // Small cloud 2
       new Matrix4()
-        .translate(1, 7.3, -2.5)
-        .scale(0.03, 0.018, 0.03)
+        .translate(4, 6.8, -3)
+        .scale(0.5, 0.3, 0.5)
+        .rotate(75, 0, 1, 0),
+      // Additional clouds for variety
+      new Matrix4()
+        .translate(1, 7.5, -2.5)
+        .scale(0.6, 0.4, 0.6)
         .rotate(20, 0, 1, 0),
-      new Matrix4().translate(-1.5, 7.6, -3.5).scale(0.035, 0.02, 0.035).rotate(50, 0, 1, 0),
-      new Matrix4().translate(3.5, 7.2, -2).scale(0.028, 0.016, 0.028).rotate(10, 0, 1, 0),
-      new Matrix4().translate(-2.5, 7.4, -1.5).scale(0.032, 0.017, 0.032).rotate(35, 0, 1, 0),
+      new Matrix4().translate(-2, 8, -4).scale(0.7, 0.5, 0.7).rotate(50, 0, 1, 0),
+      new Matrix4().translate(3, 7.8, -5).scale(0.5, 0.3, 0.5).rotate(10, 0, 1, 0),
+      new Matrix4().translate(-3, 8.2, -2).scale(0.6, 0.4, 0.6).rotate(35, 0, 1, 0),
       // Higher altitude clouds
       new Matrix4()
-        .translate(0, 4.2, -4)
-        .scale(0.05, 0.012, 0.05)
+        .translate(0, 9, -6)
+        .scale(0.9, 0.4, 0.9)
         .rotate(25, 0, 1, 0),
-      new Matrix4().translate(-3.5, 8.0, -2.5).scale(0.042, 0.01, 0.042).rotate(65, 0, 1, 0),
+      new Matrix4().translate(-5, 8.5, -3).scale(0.8, 0.3, 0.8).rotate(65, 0, 1, 0),
     ]
   }
   
@@ -414,12 +539,15 @@ import {
       .translate(0.4, 0, 0.8)
       .concat(g_cubeMatrix)
   
-    // Animate clouds - make them drift slowly
+    // Animate clouds - make them drift slowly with subtle vertical movement
     for (let i = 0; i < g_cloudMatrices.length; i++) {
-      // Different speeds for different clouds
-      const cloudSpeed = 0.0001 * (i + 1)
+      // Different speeds and movement patterns for different clouds
+      const cloudSpeed = 0.00005 * (i + 1)
+      const verticalSpeed = 0.00002 * ((i % 3) + 1)
+  
+      // Create subtle horizontal and vertical movement
       g_cloudMatrices[i] = new Matrix4()
-        .translate(Math.sin(current_time * cloudSpeed) * 0.005, 0, 0)
+        .translate(Math.sin(current_time * cloudSpeed) * 0.003, Math.sin(current_time * verticalSpeed) * 0.001, 0)
         .concat(g_cloudMatrices[i])
     }
   
@@ -451,12 +579,9 @@ import {
     requestAnimationFrame(tick, g_canvas)
   }
   
-  // draw to the screen on the next frame
+  // Update the draw function to improve cloud rendering
   function draw() {
     // Calculate the camera position from our angle and height
-    // we get to use a bit of clever 2D rotation math
-    // note that we can only do this because we're "fixing" our plane of motion
-    // if we wanted to allow arbitrary rotation, we would want quaternions!
     camX = Math.cos((Math.PI * g_cameraAngle) / 180)
     camY = g_cameraHeight
     camZ = Math.sin((Math.PI * g_cameraAngle) / 180)
@@ -473,8 +598,8 @@ import {
     // Build a new lookat matrix each frame
     cameraMatrix = new Matrix4().setLookAt(...cameraPositionArray, 0, 0, 0, 0, 1, 0)
   
-    // Clear the canvas with a black background
-    gl.clearColor(84 / 255, 107 / 255, 171 / 255, 1)
+    // Clear the canvas with a sky blue background
+    gl.clearColor(135 / 255, 206 / 255, 235 / 255, 1) // Sky blue background
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
   
     // Draw the cube
@@ -497,7 +622,7 @@ import {
   
     // Update our spec power
     gl.uniform1f(g_u_specpower_ref, g_specPower)
-    
+  
     // Bind the cube texture
     gl.bindTexture(gl.TEXTURE_2D, g_cubeTexturePointer)
   
@@ -520,10 +645,21 @@ import {
     // Draw the tree model
     gl.drawArrays(gl.TRIANGLES, CUBE_MESH.length / 3, g_treeMesh.length / 3)
   
-    // Draw clouds
+    // Draw clouds with texture
     let cloudVertexOffset = CUBE_MESH.length / 3 + g_treeMesh.length / 3
   
-    for (let i = 0; i < g_cloudMeshes.length; i++) {
+    // Enable alpha blending for clouds with improved blend function
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+  
+    // Disable depth writing for transparent clouds but keep depth testing
+    gl.depthMask(false)
+  
+    // Bind the cloud texture
+    gl.bindTexture(gl.TEXTURE_2D, g_cloudTexturePointer)
+  
+    // Draw each cloud
+    for (let i = 0; i < g_cloudMeshes.length && i < g_cloudMatrices.length; i++) {
       const cloudMesh = g_cloudMeshes[i]
       const cloudMatrix = g_cloudMatrices[i]
   
@@ -535,9 +671,8 @@ import {
       gl.uniformMatrix4fv(g_u_model_ref, false, cloudMatrix.elements)
       gl.uniformMatrix4fv(g_u_inversetranspose_ref, false, cloudInverseTranspose.elements)
   
-      // Use flat lighting for the clouds with a white/light blue color
-      gl.uniform1i(g_u_flatlighting_ref, true)
-      gl.uniform3fv(g_u_flatcolor_ref, [0.9, 0.95, 1.0]) // Light blue/white for clouds
+      // Use texture for clouds instead of flat lighting
+      gl.uniform1i(g_u_flatlighting_ref, false)
   
       // Draw the cloud model
       gl.drawArrays(gl.TRIANGLES, cloudVertexOffset, cloudMesh.length / 3)
@@ -546,22 +681,28 @@ import {
       cloudVertexOffset += cloudMesh.length / 3
     }
   
+    // Re-enable depth writing after drawing clouds
+    gl.depthMask(true)
+  
+    // Disable blending after drawing clouds
+    gl.disable(gl.BLEND)
+  
     // Draw the grid with texture
     // Set up the grid's model and world matrices
     gl.uniformMatrix4fv(g_u_model_ref, false, new Matrix4().elements)
     gl.uniformMatrix4fv(g_u_world_ref, false, new Matrix4().translate(0, GRID_Y_OFFSET, 0).elements)
-    
+  
     // Calculate the inverse transpose for the grid
     var gridInverseTranspose = new Matrix4().translate(0, GRID_Y_OFFSET, 0)
     gridInverseTranspose.invert().transpose()
     gl.uniformMatrix4fv(g_u_inversetranspose_ref, false, gridInverseTranspose.elements)
-    
+  
     // Use texture for the grid instead of flat lighting
     gl.uniform1i(g_u_flatlighting_ref, false)
-    
+  
     // Bind the grid texture
     gl.bindTexture(gl.TEXTURE_2D, g_gridTexturePointer)
-    
+  
     // Draw the grid as triangles
     gl.drawArrays(gl.TRIANGLES, cloudVertexOffset, g_gridMesh.length / 3)
   
@@ -647,37 +788,37 @@ import {
   
     // Create a single large quad for the grid
     const size = Math.max(GRID_X_RANGE, GRID_Z_RANGE)
-    
+  
     // Create a plane with 4 vertices (2 triangles)
     // First triangle
     mesh.push(-size, 0, -size) // bottom-left
-    mesh.push(size, 0, -size)  // bottom-right
-    mesh.push(-size, 0, size)  // top-left
-    
+    mesh.push(size, 0, -size) // bottom-right
+    mesh.push(-size, 0, size) // top-left
+  
     // Second triangle
-    mesh.push(size, 0, -size)  // bottom-right
-    mesh.push(size, 0, size)   // top-right
-    mesh.push(-size, 0, size)  // top-left
-    
+    mesh.push(size, 0, -size) // bottom-right
+    mesh.push(size, 0, size) // top-right
+    mesh.push(-size, 0, size) // top-left
+  
     // Add normals (all pointing up)
     for (let i = 0; i < 6; i++) {
       normals.push(0, 1, 0)
     }
-    
+  
     // Add texture coordinates
     // Scale factor to repeat the texture across the grid
     const texRepeat = 20 // Adjust this value to control texture tiling
-    
+  
     // First triangle
     texCoords.push(0, 0)
     texCoords.push(texRepeat, 0)
     texCoords.push(0, texRepeat)
-    
+  
     // Second triangle
     texCoords.push(texRepeat, 0)
     texCoords.push(texRepeat, texRepeat)
     texCoords.push(0, texRepeat)
-    
+  
     return { mesh, normals, texCoords }
   }
   
@@ -723,3 +864,5 @@ import {
   // Send to HTML
   
   window.main = main
+  
+  
