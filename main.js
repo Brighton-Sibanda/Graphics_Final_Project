@@ -1,8 +1,6 @@
 // Last edited by Brighton Sibanda
 
 import { GRID_X_RANGE, GRID_Z_RANGE, GRID_Y_OFFSET, FLOAT_SIZE, CAMERA_SPEED, CAMERA_ROT_SPEED } from "./extras.js"
-
-
 // references to the GLSL programs we need to load
 var g_vshader
 var g_fshader
@@ -28,7 +26,6 @@ var g_u_texture_ref
 var g_cottageMatrix
 var g_worldMatrix
 var g_projectionMatrix
-var g_treeMatrix // Added for tree
 
 // keep track of the camera position, always looking at the teapot
 var g_cameraDistance
@@ -61,8 +58,6 @@ var g_specPower
 var g_movingUp, g_movingDown, g_movingLeft, g_movingRight, g_movingForward
 var g_movingBackward
 
-// Tree mesh
-var g_treeMesh // Added for tree
 var g_cloudMeshes = [] // Added for clouds
 var g_cloudMatrices = [] // Added for cloud transformations
 var g_cloudTexCoords = [] // Added for cloud texture coordinates
@@ -75,6 +70,12 @@ var g_cottageTexCoords = []
 
 // Cube mesh for light source
 var g_cubeMesh
+
+// Add these variables at the top of the file with the other global variables
+var g_starPositions = []
+var g_starColors = []
+var g_starCount = 2000 // Increased number of stars
+var g_starSize = 0.05 // Size of stars
 
 ///// extras
 var slider_input
@@ -151,18 +152,20 @@ async function loadImageFiles() {
   g_cottageImage.src = "./resources/85-cottage_obj/cottage_diffuse_upside_down.png"
   await g_cottageImage.decode()
 
+  // Trees have been removed
+
   // Load the grid texture
   const tempImage = new Image()
-  tempImage.src = "./resources/mountain/ground_grass_3264_4062_Small.jpg" // Make sure this path is correct
-  tempImage.crossOrigin = "anonymous" // Add this to prevent CORS issues
+  tempImage.src = "./resources/mountain/ground_grass_3264_4062_Small.jpg"
+  tempImage.crossOrigin = "anonymous"
   await tempImage.decode()
 
   // Convert to power-of-two texture
   g_gridImage = createPowerOfTwoTexture(tempImage)
 
-  // Load the cloud texture - use a more suitable cloud texture with soft edges
+  // Load the cloud texture
   const cloudTempImage = new Image()
-  cloudTempImage.src = "./resources/clouds/cloud.png" // Update this path to your cloud texture
+  cloudTempImage.src = "./resources/clouds/cloud.png"
   cloudTempImage.crossOrigin = "anonymous"
   await cloudTempImage.decode()
 
@@ -186,11 +189,7 @@ async function loadGLSLFiles() {
 
 // Update the loadOBJFiles function to ensure normals are properly processed
 async function loadOBJFiles() {
-  // Load the tree model
-  const treeData = await fetch("./resources/low_poly_tree/Lowpoly_tree_sample.obj").then((response) => response.text())
-
-  g_treeMesh = []
-  readObjFile(treeData, g_treeMesh)
+  // Trees have been removed
 
   // Load the cottage model
   const cottageData = await fetch("./resources/85-cottage_obj/cottage_tri.obj").then((response) => response.text())
@@ -241,6 +240,26 @@ async function loadOBJFiles() {
   }
 
   startRendering()
+}
+
+// Add a function to generate simple texture coordinates for models that don't have them
+function generateSimpleTexCoords(mesh, texCoords) {
+  const vertexCount = mesh.length / 3
+
+  for (let i = 0; i < vertexCount; i++) {
+    // Get the vertex position
+    const x = mesh[i * 3]
+    const y = mesh[i * 3 + 1]
+    const z = mesh[i * 3 + 2]
+
+    // Generate simple texture coordinates based on position
+    // This is a simple mapping that might work for tree-like objects
+    // For better results, you might need a more sophisticated approach
+    const u = Math.atan2(z, x) / (2 * Math.PI) + 0.5 // Map angle to [0,1]
+    const v = (y + 1) / 2 // Map height to [0,1] assuming y is in [-1,1]
+
+    texCoords.push(u, v)
+  }
 }
 
 // Add a function to generate smooth normals for cloud meshes
@@ -339,22 +358,15 @@ function startRendering() {
     allCloudTexCoords = allCloudTexCoords.concat(g_cloudTexCoords[i])
   }
 
-  // Create dummy normals and texture coordinates for the tree
-  const treeDummyNormals = Array(g_treeMesh.length).fill(0)
-  const treeDummyTexCoords = Array((g_treeMesh.length / 3) * 2).fill(0)
-
   var data = g_cottageMesh
-    .concat(g_treeMesh)
     .concat(allCloudVertices)
     .concat(g_gridMesh)
     .concat(g_cubeMesh) // Add the cube mesh
     .concat(g_cottageNormals)
-    .concat(treeDummyNormals)
     .concat(allCloudNormals)
     .concat(g_gridNormals)
     .concat(Array(g_cubeMesh.length).fill(0)) // Add dummy normals for the cube
     .concat(g_cottageTexCoords)
-    .concat(treeDummyTexCoords)
     .concat(allCloudTexCoords)
     .concat(g_gridTexCoords)
     .concat(Array((g_cubeMesh.length / 3) * 2).fill(0)) // Add dummy texture coords for the cube
@@ -372,8 +384,7 @@ function startRendering() {
       3,
       "a_Normal",
       0,
-      FLOAT_SIZE *
-        (g_cottageMesh.length + g_treeMesh.length + allCloudVertices.length + g_gridMesh.length + g_cubeMesh.length),
+      FLOAT_SIZE * (g_cottageMesh.length + allCloudVertices.length + g_gridMesh.length + g_cubeMesh.length),
     )
   ) {
     return
@@ -383,9 +394,7 @@ function startRendering() {
       2,
       "a_TexCoord",
       0,
-      FLOAT_SIZE *
-        (g_cottageMesh.length + g_treeMesh.length + allCloudVertices.length + g_gridMesh.length + g_cubeMesh.length) *
-        2,
+      FLOAT_SIZE * (g_cottageMesh.length + allCloudVertices.length + g_gridMesh.length + g_cubeMesh.length) * 2,
     )
   ) {
     return
@@ -405,9 +414,6 @@ function startRendering() {
 
   // Setup our model
   g_cottageMatrix = new Matrix4().rotate(20, 1, 0, 0).scale(0.125, 0.125, 0.125)
-
-  // Setup tree model matrix
-  g_treeMatrix = new Matrix4().translate(0.5, 0, 0.5).scale(0.1, 0.1, 0.1)
 
   // Setup cloud matrices
   setupCloudMatrices()
@@ -445,13 +451,15 @@ function startRendering() {
   tick()
 }
 
-// Function to set up textures
+// Update the setupTextures function to include tree textures
 function setupTextures() {
-  // Create and set up the cube texture
+  // Create and set up the cottage texture
   g_cottageTexturePointer = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, g_cottageTexturePointer)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, g_cottageImage)
   gl.generateMipmap(gl.TEXTURE_2D)
+
+  // Trees have been removed
 
   // Create and set up the grid texture
   g_gridTexturePointer = gl.createTexture()
@@ -482,72 +490,96 @@ function setupTextures() {
 
 // Add a function to set up cloud matrices
 function setupCloudMatrices() {
-  // Create an array to hold all cloud matrices
-  g_cloudMatrices = []
-
-  // Create a function to generate random cloud positions
-  const addRandomClouds = (count, heightMin, heightMax, radiusMin, radiusMax) => {
-    for (let i = 0; i < count; i++) {
-      // Generate random position in a circular pattern
-      const angle = Math.random() * Math.PI * 2
-      const radius = radiusMin + Math.random() * (radiusMax - radiusMin)
-      const x = Math.cos(angle) * radius
-      const z = Math.sin(angle) * radius
-      const y = heightMin + Math.random() * (heightMax - heightMin)
-
-      // Random scale (small variations)
-      const baseScale = 0.05 + Math.random() * 0.04
-      const scaleX = baseScale * (0.8 + Math.random() * 0.4)
-      const scaleY = baseScale * (0.6 + Math.random() * 0.4)
-      const scaleZ = baseScale * (0.8 + Math.random() * 0.4)
-
-      // Random rotation
-      const rotation = Math.random() * 360
-
-      // Create the matrix and add to array
-      g_cloudMatrices.push(new Matrix4().translate(x, y, z).scale(scaleX, scaleY, scaleZ).rotate(rotation, 0, 1, 0))
-    }
-  }
-
-  // Add clouds at different height layers
-  // Low clouds
-  addRandomClouds(15, 5, 6, 3, 8)
-
-  // Medium clouds
-  addRandomClouds(20, 6.5, 8, 5, 12)
-
-  // High clouds
-  addRandomClouds(10, 8.5, 10, 7, 15)
-
-  // Add some distant clouds on the horizon
-  addRandomClouds(25, 4, 6, 15, 25)
-
-  // Add a few very large clouds in the distance
-  for (let i = 0; i < 5; i++) {
-    const angle = Math.random() * Math.PI * 2
-    const radius = 20 + Math.random() * 10
-    const x = Math.cos(angle) * radius
-    const z = Math.sin(angle) * radius
-    const y = 7 + Math.random() * 2
-
-    g_cloudMatrices.push(
-      new Matrix4()
-        .translate(x, y, z)
-        .scale(0.15, 0.08, 0.15)
-        .rotate(Math.random() * 360, 0, 1, 0),
-    )
-  }
-
-  console.log(`Created ${g_cloudMatrices.length} clouds in the scene`)
+  // Position clouds at different locations in the sky
+  g_cloudMatrices = [
+    // Small cloud
+    new Matrix4()
+      .translate(-3, 6, -3)
+      .scale(0.05, 0.03, 0.05)
+      .rotate(30, 0, 1, 0),
+    // Medium cloud
+    new Matrix4()
+      .translate(2, 6.5, -2)
+      .scale(0.06, 0.04, 0.06)
+      .rotate(60, 0, 1, 0),
+    // Large cloud
+    new Matrix4()
+      .translate(0, 7, -4)
+      .scale(0.07, 0.05, 0.07)
+      .rotate(15, 0, 1, 0),
+    // Long cloud
+    new Matrix4()
+      .translate(-4, 7.2, -5)
+      .scale(0.08, 0.03, 0.06)
+      .rotate(45, 0, 1, 0),
+    // Small cloud 2
+    new Matrix4()
+      .translate(4, 6.8, -3)
+      .scale(0.05, 0.03, 0.05)
+      .rotate(75, 0, 1, 0),
+    // Additional clouds for variety
+    new Matrix4()
+      .translate(1, 7.5, -2.5)
+      .scale(0.06, 0.04, 0.06)
+      .rotate(20, 0, 1, 0),
+    new Matrix4().translate(-2, 8, -4).scale(0.07, 0.05, 0.07).rotate(50, 0, 1, 0),
+    new Matrix4().translate(3, 7.8, -5).scale(0.5, 0.03, 0.05).rotate(10, 0, 1, 0),
+    new Matrix4().translate(-3, 8.2, -2).scale(0.6, 0.4, 0.6).rotate(35, 0, 1, 0),
+    // Higher altitude clouds
+    new Matrix4()
+      .translate(0, 9, -6)
+      .scale(0.9, 0.4, 0.9)
+      .rotate(25, 0, 1, 0),
+    new Matrix4().translate(-5, 8.5, -3).scale(0.8, 0.3, 0.8).rotate(65, 0, 1, 0),
+  ]
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 function init() {
-  ////// setup cube
+  ////// setup cottage
   g_cottageMatrix = new Matrix4().translate(-5.4, -1, -2.8).rotate(-20, 1, 0, 0).concat(g_cottageMatrix)
 
-  //// setup tree
-  g_treeMatrix = new Matrix4().translate(0, -0.5, 0).scale(0.25, 0.25, 0.25).concat(g_treeMatrix)
+  // Generate stars for the night sky
+  generateStars()
+}
+
+// Add this function after the init() function
+function generateStars() {
+  // Clear any existing stars
+  g_starPositions = []
+  g_starColors = []
+
+  // Generate random star positions in a dome shape
+  for (let i = 0; i < g_starCount; i++) {
+    // Use spherical coordinates to distribute stars in a dome
+    const theta = Math.random() * Math.PI * 2 // 0 to 2π
+    const phi = (Math.random() * Math.PI) // 0 to π/2 (half sphere)
+    const radius = 50 + Math.random() * 30 // Reduced distance from center
+
+    // Convert spherical to Cartesian coordinates
+    const x = radius * Math.sin(phi) * Math.cos(theta)
+    const y = Math.abs(radius * Math.sin(phi) * Math.sin(theta)) // Make sure y is positive
+    const z = radius * Math.cos(phi)
+
+    g_starPositions.push(x, y, z)
+
+    // Generate random star colors (mostly white with some colored stars)
+    const colorType = Math.random()
+    if (colorType < 0.7) {
+      // White/blue-white stars (70%)
+      const brightness = 0.8 + Math.random() * 0.2
+      g_starColors.push(brightness, brightness, brightness + Math.random() * 0.2)
+    } else if (colorType < 0.8) {
+      // Yellow/orange stars (10%)
+      g_starColors.push(1.0, 0.7 + Math.random() * 0.3, 0.3 + Math.random() * 0.2)
+    } else if (colorType < 0.9) {
+      // Red stars (10%)
+      g_starColors.push(0.9 + Math.random() * 0.1, 0.2 + Math.random() * 0.3, 0.2 + Math.random() * 0.2)
+    } else {
+      // Blue stars (10%)
+      g_starColors.push(0.5 + Math.random() * 0.2, 0.7 + Math.random() * 0.2, 1.0)
+    }
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -565,28 +597,13 @@ function tick() {
   // Animate clouds - make them drift slowly with subtle vertical movement
   for (let i = 0; i < g_cloudMatrices.length; i++) {
     // Different speeds and movement patterns for different clouds
-    const cloudSpeed = 0.00002 + 0.00001 * (i % 5)
-    const verticalSpeed = 0.00001 + 0.000005 * (i % 3)
+    const cloudSpeed = 0.00005 * (i + 1)
+    const verticalSpeed = 0.00002 * ((i % 3) + 1)
 
     // Create subtle horizontal and vertical movement
-    // Use different movement patterns based on cloud index
-    let xMovement, yMovement
-
-    if (i % 3 === 0) {
-      // Circular motion
-      xMovement = Math.sin(current_time * cloudSpeed) * 0.002
-      yMovement = Math.cos(current_time * verticalSpeed) * 0.0005
-    } else if (i % 3 === 1) {
-      // Linear motion with sine wave
-      xMovement = (current_time * cloudSpeed * 0.0001) % 0.1
-      yMovement = Math.sin(current_time * verticalSpeed) * 0.0008
-    } else {
-      // Figure-8 pattern
-      xMovement = Math.sin(current_time * cloudSpeed) * 0.003
-      yMovement = Math.sin(current_time * verticalSpeed * 2) * 0.0006
-    }
-
-    g_cloudMatrices[i] = new Matrix4().translate(xMovement, yMovement, 0).concat(g_cloudMatrices[i])
+    g_cloudMatrices[i] = new Matrix4()
+      .translate(Math.sin(current_time * cloudSpeed) * 0.003, Math.sin(current_time * verticalSpeed) * 0.001, 0)
+      .concat(g_cloudMatrices[i])
   }
 
   // move the camera based on user input
@@ -637,8 +654,12 @@ function draw() {
   cameraMatrix = new Matrix4().setLookAt(...cameraPositionArray, 0, 0, 0, 0, 1, 0)
 
   // Clear the canvas with a sky blue background
-  gl.clearColor(135 / 255, 206 / 255, 235 / 255, 1) // Sky blue background
+  // gl.clearColor(135 / 255, 206 / 255, 235 / 255, 1) // Sky blue background
+  gl.clearColor(0, 0, 0, 1)
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+  // Draw stars in the night sky first (before other objects)
+  drawStars()
 
   // Draw the cottage
   // Calculate the inverse transpose of our model matrix each frame
@@ -667,24 +688,10 @@ function draw() {
   // Draw our cottage model
   gl.drawArrays(gl.TRIANGLES, 0, g_cottageMesh.length / 3)
 
-  // Draw the tree
-  // Calculate the inverse transpose for the tree
-  var treeInverseTranspose = new Matrix4(g_worldMatrix).multiply(g_treeMatrix)
-  treeInverseTranspose.invert().transpose()
-
-  // Update matrices for the tree
-  gl.uniformMatrix4fv(g_u_model_ref, false, g_treeMatrix.elements)
-  gl.uniformMatrix4fv(g_u_inversetranspose_ref, false, treeInverseTranspose.elements)
-
-  // Use flat lighting for the tree since it doesn't have texture
-  gl.uniform1i(g_u_flatlighting_ref, true)
-  gl.uniform3fv(g_u_flatcolor_ref, [0.2, 0.5, 0.2]) // Green color for the tree
-
-  // Draw the tree model
-  gl.drawArrays(gl.TRIANGLES, g_cottageMesh.length / 3, g_treeMesh.length / 3)
+  // Trees have been removed
 
   // Draw clouds with texture
-  let cloudVertexOffset = g_cottageMesh.length / 3 + g_treeMesh.length / 3
+  let cloudVertexOffset = g_cottageMesh.length / 3
 
   // Enable alpha blending for clouds with improved blend function
   gl.enable(gl.BLEND)
@@ -752,6 +759,42 @@ function draw() {
   // Use the cube mesh for the light source
   const cubeOffset = cloudVertexOffset + g_gridMesh.length / 3
   gl.drawArrays(gl.TRIANGLES, cubeOffset, g_cubeMesh.length / 3)
+}
+
+// Change the drawStars function to draw stars directly
+function drawStars() {
+  // Save the current GL state
+  gl.disable(gl.DEPTH_TEST)
+  gl.enable(gl.BLEND)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE) // Additive blending for glow effect
+
+  // Set up the camera and projection matrices
+  gl.uniformMatrix4fv(g_u_camera_ref, false, cameraMatrix.elements)
+  gl.uniformMatrix4fv(g_u_projection_ref, false, g_projectionMatrix.elements)
+
+  // Use flat lighting for stars
+  gl.uniform1i(g_u_flatlighting_ref, true)
+
+  // Draw each star
+  for (let i = 0; i < g_starCount; i++) {
+    // Set the star color with higher brightness
+    gl.uniform3fv(g_u_flatcolor_ref, [g_starColors[i * 3], g_starColors[i * 3 + 1], g_starColors[i * 3 + 2]])
+
+    // Position the star - use a larger size for better visibility
+    gl.uniformMatrix4fv(g_u_model_ref, false, new Matrix4().scale(g_starSize, g_starSize, g_starSize).elements)
+    gl.uniformMatrix4fv(
+      g_u_world_ref,
+      false,
+      new Matrix4().translate(g_starPositions[i * 3], g_starPositions[i * 3 + 1], g_starPositions[i * 3 + 2]).elements,
+    )
+
+    // Draw a point for the star (using the cube mesh)
+    gl.drawArrays(gl.TRIANGLES, 0, 36) // Draw a small cube for each star
+  }
+
+  // Restore GL state
+  gl.disable(gl.BLEND)
+  gl.enable(gl.DEPTH_TEST)
 }
 
 function updateLightX(amount) {
