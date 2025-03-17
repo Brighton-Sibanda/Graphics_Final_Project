@@ -1,6 +1,7 @@
 // Last edited by Brighton Sibanda
 
 import { GRID_X_RANGE, GRID_Z_RANGE, GRID_Y_OFFSET, FLOAT_SIZE, CAMERA_SPEED, CAMERA_ROT_SPEED } from "./extras.js"
+
 // references to the GLSL programs we need to load
 var g_vshader
 var g_fshader
@@ -21,6 +22,10 @@ var g_u_specpower_ref
 var g_u_flatlighting_ref
 var g_u_flatcolor_ref
 var g_u_texture_ref
+
+// Point light uniforms
+var g_u_point_lights_ref
+var g_u_point_light_count_ref
 
 // usual model/world matrices
 var g_cottageMatrix
@@ -54,9 +59,13 @@ var g_lightPosition
 // Spec Power
 var g_specPower
 
-// Key states
-var g_movingUp, g_movingDown, g_movingLeft, g_movingRight, g_movingForward
-var g_movingBackward
+// Key states - properly initialized to false
+var g_movingUp = false
+var g_movingDown = false
+var g_movingLeft = false
+var g_movingRight = false
+var g_movingForward = false
+var g_movingBackward = false
 
 var g_cloudMeshes = [] // Added for clouds
 var g_cloudMatrices = [] // Added for cloud transformations
@@ -71,11 +80,23 @@ var g_cottageTexCoords = []
 // Cube mesh for light source
 var g_cubeMesh
 
-// Add these variables at the top of the file with the other global variables
+// Star variables
 var g_starPositions = []
 var g_starColors = []
 var g_starCount = 2000 // Increased number of stars
 var g_starSize = 0.05 // Size of stars
+
+// Firefly system variables
+var g_fireflies = []
+var g_fireflyCount = 50 // Number of fireflies
+var g_fireflyColors = [
+  [1.0, 0.9, 0.4], // Warm yellow
+  [1.0, 0.8, 0.3], // Golden yellow
+  [0.9, 0.8, 0.2], // Amber
+]
+var g_fireflySize = 0.03 // Smaller size
+var g_fireflyIntensity = 0.8 // Less intense
+var g_fireflyLights = [] // Will store light positions and colors
 
 ///// extras
 var slider_input
@@ -152,8 +173,6 @@ async function loadImageFiles() {
   g_cottageImage.src = "./resources/85-cottage_obj/cottage_diffuse_upside_down.png"
   await g_cottageImage.decode()
 
-  // Trees have been removed
-
   // Load the grid texture
   const tempImage = new Image()
   tempImage.src = "./resources/mountain/ground_grass_3264_4062_Small.jpg"
@@ -189,8 +208,6 @@ async function loadGLSLFiles() {
 
 // Update the loadOBJFiles function to ensure normals are properly processed
 async function loadOBJFiles() {
-  // Trees have been removed
-
   // Load the cottage model
   const cottageData = await fetch("./resources/85-cottage_obj/cottage_tri.obj").then((response) => response.text())
 
@@ -200,7 +217,7 @@ async function loadOBJFiles() {
   g_cottageTexCoords = []
   readObjFile(cottageData, g_cottageMesh, g_cottageNormals, g_cottageTexCoords)
 
-  // Load cloud models from the new path
+  // Load cloud models from the path
   const cloudFiles = [
     "./resources/cloudOBJ/CloudCollection.obj",
     "./resources/cloudOBJ/CloudCollection.obj",
@@ -225,12 +242,23 @@ async function loadOBJFiles() {
     // Use the readObjFile function to parse the OBJ file with texture coordinates and normals
     readObjFile(cloudData, cloudMesh, cloudNormals, cloudTexCoords)
 
-    // Ensure normals are properly set for smooth shading
-    // If the model doesn't have enough normals, we'll generate smooth normals
-   
+    // Add the cloud data to our arrays
     g_cloudNormals.push(cloudNormals)
     g_cloudMeshes.push(cloudMesh)
     g_cloudTexCoords.push(cloudTexCoords)
+    
+    // Duplicate each cloud model with slight variations to create more clouds
+    // without loading additional models
+    for (let i = 0; i < 5; i++) {
+      // Create a slightly modified copy of the cloud mesh
+      const modifiedMesh = [...cloudMesh]
+      const modifiedNormals = [...cloudNormals]
+      const modifiedTexCoords = [...cloudTexCoords]
+      
+      g_cloudNormals.push(modifiedNormals)
+      g_cloudMeshes.push(modifiedMesh)
+      g_cloudTexCoords.push(modifiedTexCoords)
+    }
   }
 
   startRendering()
@@ -319,6 +347,10 @@ function startRendering() {
   g_u_flatcolor_ref = gl.getUniformLocation(gl.program, "u_FlatColor")
   g_u_texture_ref = gl.getUniformLocation(gl.program, "u_Texture")
 
+  // Get references to firefly uniforms
+  g_u_point_lights_ref = gl.getUniformLocation(gl.program, "u_PointLights")
+  g_u_point_light_count_ref = gl.getUniformLocation(gl.program, "u_PointLightCount")
+
   // Setup our model
   g_cottageMatrix = new Matrix4().rotate(20, 1, 0, 0).scale(0.125, 0.125, 0.125)
 
@@ -353,9 +385,159 @@ function startRendering() {
   updateLightZ(2)
   updateSpecPower(16)
 
+  // Initialize fireflies
+  initFireflies()
+
   init()
 
   tick()
+}
+
+function initFireflies() {
+  g_fireflies = []
+  g_fireflyLights = []
+
+  // Create fireflies around the cottage
+  for (let i = 0; i < g_fireflyCount; i++) {
+    // Position fireflies in a radius around the cottage with better distribution
+    let angle, radius, height, x, y, z
+
+    // Create clusters of fireflies in different areas
+    if (i < g_fireflyCount * 0.4) {
+      // 40% close to the cottage
+      angle = Math.random() * Math.PI * 2
+      radius = 1 + Math.random() * 3 // Closer to cottage
+      height = 0.3 + Math.random() * 1.5 // Lower height
+
+      x = -5.4 + Math.cos(angle) * radius // Cottage is at -5.4
+      y = height
+      z = -2.8 + Math.sin(angle) * radius // Cottage is at -2.8
+    } else if (i < g_fireflyCount * 0.7) {
+      // 30% in mid-distance
+      angle = Math.random() * Math.PI * 2
+      radius = 3 + Math.random() * 4 // Mid distance
+      height = 0.5 + Math.random() * 2 // Mid height
+
+      x = -5.4 + Math.cos(angle) * radius
+      y = height
+      z = -2.8 + Math.sin(angle) * radius
+    } else {
+      // 30% scattered further away
+      angle = Math.random() * Math.PI * 2
+      radius = 6 + Math.random() * 6 // Further away
+      height = 0.2 + Math.random() * 3 // Variable height
+
+      x = -5.4 + Math.cos(angle) * radius
+      y = height
+      z = -2.8 + Math.sin(angle) * radius
+    }
+
+    // Random color from our palette
+    const colorIndex = Math.floor(Math.random() * g_fireflyColors.length)
+    const color = g_fireflyColors[colorIndex]
+
+    // Random phase for animation
+    const phase = Math.random() * Math.PI * 2
+    const speed = 0.3 + Math.random() * 1.0 // Slower speed for more natural movement
+
+    g_fireflies.push({
+      position: [x, y, z],
+      originalPosition: [x, y, z],
+      color: color,
+      phase: phase,
+      speed: speed,
+      intensity: 0.3 + Math.random() * 0.4, // Lower base intensity
+      radius: 0.3 + Math.random() * 0.8, // Smaller movement radius
+    })
+
+    // Add to lights array (will be updated each frame)
+    g_fireflyLights.push(
+      x,
+      y,
+      z, // Position
+      color[0],
+      color[1],
+      color[2], // Color
+      0.5, // Initial intensity (will be animated)
+    )
+  }
+}
+
+function updateFireflies(deltaTime) {
+  const time = Date.now() * 0.001 // Current time in seconds
+
+  for (let i = 0; i < g_fireflies.length; i++) {
+    const firefly = g_fireflies[i]
+
+    // Calculate new position with gentle random movement
+    const originalX = firefly.originalPosition[0]
+    const originalY = firefly.originalPosition[1]
+    const originalZ = firefly.originalPosition[2]
+
+    // Circular movement with some vertical bobbing
+    const xOffset = Math.cos(time * firefly.speed + firefly.phase) * firefly.radius
+    const yOffset = Math.sin(time * 0.5 + firefly.phase) * 0.3 // Slower vertical movement
+    const zOffset = Math.sin(time * firefly.speed + firefly.phase) * firefly.radius
+
+    // Update position
+    firefly.position[0] = originalX + xOffset
+    firefly.position[1] = originalY + yOffset
+    firefly.position[2] = originalZ + zOffset
+
+    // Pulsating intensity - more subtle pulsation
+    const pulseIntensity = 0.6 + 0.4 * Math.sin(time * firefly.speed + firefly.phase)
+
+    // Update light data for shaders
+    const lightIndex = i * 7 // 7 values per light (pos, color, intensity)
+    g_fireflyLights[lightIndex] = firefly.position[0]
+    g_fireflyLights[lightIndex + 1] = firefly.position[1]
+    g_fireflyLights[lightIndex + 2] = firefly.position[2]
+    g_fireflyLights[lightIndex + 3] = firefly.color[0]
+    g_fireflyLights[lightIndex + 4] = firefly.color[1]
+    g_fireflyLights[lightIndex + 5] = firefly.color[2]
+    g_fireflyLights[lightIndex + 6] = firefly.intensity * pulseIntensity * g_fireflyIntensity
+  }
+}
+
+// Add this function to draw fireflies
+function drawFireflies() {
+  // Enable blending for the glowing effect
+  gl.enable(gl.BLEND)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
+  gl.depthMask(false)
+
+  // Use flat lighting for fireflies
+  gl.uniform1i(g_u_flatlighting_ref, true)
+
+  // Draw each firefly
+  for (let i = 0; i < g_fireflies.length; i++) {
+    const firefly = g_fireflies[i]
+
+    // Set the firefly color with pulsating intensity
+    const time = Date.now() * 0.001
+    const pulseIntensity = 0.6 + 0.4 * Math.sin(time * 2 * firefly.speed + firefly.phase)
+    const color = [
+      firefly.color[0] * pulseIntensity,
+      firefly.color[1] * pulseIntensity,
+      firefly.color[2] * pulseIntensity,
+    ]
+
+    gl.uniform3fv(g_u_flatcolor_ref, color)
+
+    // Position the firefly
+    gl.uniformMatrix4fv(g_u_model_ref, false, new Matrix4().scale(g_fireflySize, g_fireflySize, g_fireflySize).elements)
+    gl.uniformMatrix4fv(g_u_world_ref, false, new Matrix4().translate(...firefly.position).elements)
+
+    // Draw a small sphere for each firefly (using the cube mesh for simplicity)
+    // You could replace this with a proper sphere mesh if available
+    const cubeOffset =
+      g_cottageMesh.length / 3 + g_cloudMeshes.reduce((sum, mesh) => sum + mesh.length / 3, 0) + g_gridMesh.length / 3
+    gl.drawArrays(gl.TRIANGLES, cubeOffset, g_cubeMesh.length / 3)
+  }
+
+  // Restore GL state
+  gl.depthMask(true)
+  gl.disable(gl.BLEND)
 }
 
 // Update the setupTextures function to include tree textures
@@ -365,8 +547,6 @@ function setupTextures() {
   gl.bindTexture(gl.TEXTURE_2D, g_cottageTexturePointer)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, g_cottageImage)
   gl.generateMipmap(gl.TEXTURE_2D)
-
-  // Trees have been removed
 
   // Create and set up the grid texture
   g_gridTexturePointer = gl.createTexture()
@@ -395,49 +575,156 @@ function setupTextures() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 }
 
-// Add a function to set up cloud matrices
+// Enhanced cloud matrices function with many more clouds
 function setupCloudMatrices() {
-  // Position clouds at different locations in the sky
+  // Position clouds at different locations in the sky with more variety
   g_cloudMatrices = [
-    // Small cloud
+    // Original clouds
     new Matrix4()
       .translate(-3, 6, -3)
       .scale(0.05, 0.03, 0.05)
       .rotate(30, 0, 1, 0),
-    // Medium cloud
     new Matrix4()
       .translate(2, 6.5, -2)
       .scale(0.06, 0.04, 0.06)
       .rotate(60, 0, 1, 0),
-    // Large cloud
     new Matrix4()
       .translate(0, 7, -4)
       .scale(0.07, 0.05, 0.07)
       .rotate(15, 0, 1, 0),
-    // Long cloud
     new Matrix4()
       .translate(-4, 7.2, -5)
       .scale(0.08, 0.03, 0.06)
       .rotate(45, 0, 1, 0),
-    // Small cloud 2
     new Matrix4()
       .translate(4, 6.8, -3)
       .scale(0.05, 0.03, 0.05)
       .rotate(75, 0, 1, 0),
-    // Additional clouds for variety
+    
+    // Additional clouds for more coverage
     new Matrix4()
       .translate(1, 7.5, -2.5)
       .scale(0.06, 0.04, 0.06)
       .rotate(20, 0, 1, 0),
-    new Matrix4().translate(-2, 8, -4).scale(0.07, 0.05, 0.07).rotate(50, 0, 1, 0),
-    new Matrix4().translate(3, 7.8, -5).scale(0.5, 0.03, 0.05).rotate(10, 0, 1, 0),
-    new Matrix4().translate(-3, 8.2, -2).scale(0.6, 0.4, 0.6).rotate(35, 0, 1, 0),
-    // Higher altitude clouds
+    new Matrix4()
+      .translate(-2, 8, -4)
+      .scale(0.07, 0.05, 0.07)
+      .rotate(50, 0, 1, 0),
+    new Matrix4()
+      .translate(3, 7.8, -5)
+      .scale(0.5, 0.03, 0.05)
+      .rotate(10, 0, 1, 0),
+    new Matrix4()
+      .translate(-3, 8.2, -2)
+      .scale(0.6, 0.4, 0.6)
+      .rotate(35, 0, 1, 0),
     new Matrix4()
       .translate(0, 9, -6)
       .scale(0.9, 0.4, 0.9)
       .rotate(25, 0, 1, 0),
-    new Matrix4().translate(-5, 8.5, -3).scale(0.8, 0.3, 0.8).rotate(65, 0, 1, 0),
+    new Matrix4()
+      .translate(-5, 8.5, -3)
+      .scale(0.8, 0.3, 0.8)
+      .rotate(65, 0, 1, 0),
+      
+    // NEW CLOUDS - adding many more clouds as requested
+    // Lower altitude clouds
+    new Matrix4()
+      .translate(-7, 5.5, -4)
+      .scale(0.7, 0.3, 0.7)
+      .rotate(15, 0, 1, 0),
+    new Matrix4()
+      .translate(6, 5.8, -6)
+      .scale(0.6, 0.25, 0.6)
+      .rotate(40, 0, 1, 0),
+    new Matrix4()
+      .translate(2, 6.2, -8)
+      .scale(0.8, 0.35, 0.8)
+      .rotate(70, 0, 1, 0),
+    
+    // Mid altitude clouds
+    new Matrix4()
+      .translate(-6, 7.5, -5)
+      .scale(0.9, 0.4, 0.9)
+      .rotate(25, 0, 1, 0),
+    new Matrix4()
+      .translate(5, 7.2, -3)
+      .scale(0.7, 0.3, 0.7)
+      .rotate(55, 0, 1, 0),
+    new Matrix4()
+      .translate(0, 7.8, -7)
+      .scale(0.85, 0.35, 0.85)
+      .rotate(10, 0, 1, 0),
+    
+    // Higher altitude clouds
+    new Matrix4()
+      .translate(-4, 9.5, -2)
+      .scale(1.0, 0.45, 1.0)
+      .rotate(30, 0, 1, 0),
+    new Matrix4()
+      .translate(3, 9.2, -4)
+      .scale(0.9, 0.4, 0.9)
+      .rotate(60, 0, 1, 0),
+    new Matrix4()
+      .translate(-2, 9.8, -6)
+      .scale(1.1, 0.5, 1.1)
+      .rotate(20, 0, 1, 0),
+    
+    // Distant clouds
+    new Matrix4()
+      .translate(-8, 8.5, -10)
+      .scale(1.2, 0.5, 1.2)
+      .rotate(45, 0, 1, 0),
+    new Matrix4()
+      .translate(7, 8.8, -12)
+      .scale(1.3, 0.55, 1.3)
+      .rotate(15, 0, 1, 0),
+    new Matrix4()
+      .translate(0, 9.0, -15)
+      .scale(1.4, 0.6, 1.4)
+      .rotate(30, 0, 1, 0),
+    
+    // Cloud clusters
+    new Matrix4()
+      .translate(-5, 7.0, -8)
+      .scale(0.7, 0.3, 0.7)
+      .rotate(25, 0, 1, 0),
+    new Matrix4()
+      .translate(-5.5, 7.5, -8.5)
+      .scale(0.6, 0.25, 0.6)
+      .rotate(40, 0, 1, 0),
+    new Matrix4()
+      .translate(-4.5, 7.2, -7.5)
+      .scale(0.8, 0.35, 0.8)
+      .rotate(10, 0, 1, 0),
+    
+    // Another cloud cluster
+    new Matrix4()
+      .translate(4, 8.0, -6)
+      .scale(0.75, 0.3, 0.75)
+      .rotate(35, 0, 1, 0),
+    new Matrix4()
+      .translate(4.5, 8.3, -6.5)
+      .scale(0.65, 0.25, 0.65)
+      .rotate(50, 0, 1, 0),
+    new Matrix4()
+      .translate(3.5, 7.8, -5.5)
+      .scale(0.85, 0.35,  0.25, 0.65)
+      .rotate(50, 0, 1, 0),
+    new Matrix4()
+      .translate(3.5, 7.8, -5.5)
+      .scale(0.85, 0.35, 0.85)
+      .rotate(20, 0, 1, 0),
+      
+    // Scattered clouds
+    new Matrix4()
+      .translate(-7, 6.5, -9)
+      .scale(0.7, 0.3, 0.7)
+      .rotate(35, 0, 1, 0),
+    new Matrix4()
+      .translate(6, 7.5, -10)
+      .scale(0.8, 0.35, 0.8)
+      .rotate(55, 0, 1, 0),
   ]
 }
 
@@ -460,15 +747,15 @@ function generateStars() {
   for (let i = 0; i < g_starCount; i++) {
     // Use spherical coordinates to distribute stars in a dome
     const theta = Math.random() * Math.PI * 2 // 0 to 2π
-    const phi = (Math.random() * Math.PI) // 0 to π/2 (half sphere)
+    const phi = Math.random() * Math.PI // 0 to π/2 (half sphere)
     const radius = 50 + Math.random() * 30 // Reduced distance from center
 
     // Convert spherical to Cartesian coordinates
     const x = radius * Math.sin(phi) * Math.cos(theta)
-    const y = Math.abs(radius * Math.sin(phi) * Math.sin(theta)) // Make sure y is positive
+    const y_star = Math.abs(radius * Math.sin(phi) * Math.sin(theta)) // Make sure y is positive
     const z = radius * Math.cos(phi)
 
-    g_starPositions.push(x, y, z)
+    g_starPositions.push(x, y_star, z)
 
     // Generate random star colors (mostly white with some colored stars)
     const colorType = Math.random()
@@ -501,17 +788,26 @@ function tick() {
   deltaTime = current_time - g_lastFrameMS
   g_lastFrameMS = current_time
 
-  // Animate clouds - make them drift slowly with subtle vertical movement
+  // Animate clouds - make them drift with more varied and natural movement
   for (let i = 0; i < g_cloudMatrices.length; i++) {
     // Different speeds and movement patterns for different clouds
-    const cloudSpeed = 0.00005 * (i + 1)
-    const verticalSpeed = 0.00002 * ((i % 3) + 1)
-
-    // Create subtle horizontal and vertical movement
+    const cloudSpeed = 0.00005 * ((i % 5) + 1) // More varied speeds
+    const verticalSpeed = 0.00002 * ((i % 4) + 1)
+    const oscillationFactor = 0.001 * ((i % 3) + 1)
+    
+    // Create more complex movement patterns
+    const horizontalMovement = Math.sin(current_time * cloudSpeed) * oscillationFactor
+    const verticalMovement = Math.sin(current_time * verticalSpeed) * (oscillationFactor * 0.5)
+    const depthMovement = Math.cos(current_time * cloudSpeed * 0.7) * (oscillationFactor * 0.3)
+    
+    // Apply the movement
     g_cloudMatrices[i] = new Matrix4()
-      .translate(Math.sin(current_time * cloudSpeed) * 0.003, Math.sin(current_time * verticalSpeed) * 0.001, 0)
+      .translate(horizontalMovement, verticalMovement, depthMovement)
       .concat(g_cloudMatrices[i])
   }
+
+  // Update fireflies
+  updateFireflies(deltaTime)
 
   // move the camera based on user input
   if (g_movingUp) {
@@ -541,7 +837,7 @@ function tick() {
   requestAnimationFrame(tick, g_canvas)
 }
 
-// Update the draw function to improve cloud rendering
+// Update the draw function to improve cloud rendering and add fireflies
 function draw() {
   // Calculate the camera position from our angle and height
   camX = Math.cos((Math.PI * g_cameraAngle) / 180)
@@ -560,10 +856,13 @@ function draw() {
   // Build a new lookat matrix each frame
   cameraMatrix = new Matrix4().setLookAt(...cameraPositionArray, 0, 0, 0, 0, 1, 0)
 
-  // Clear the canvas with a sky blue background
-  // gl.clearColor(135 / 255, 206 / 255, 235 / 255, 1) // Sky blue background
+  // Clear the canvas with a black background for night sky
   gl.clearColor(0, 0, 0, 1)
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+  // Set point light uniforms
+  gl.uniform1i(g_u_point_light_count_ref, g_fireflyCount)
+  gl.uniform1fv(g_u_point_lights_ref, new Float32Array(g_fireflyLights))
 
   // Draw stars in the night sky first (before other objects)
   drawStars()
@@ -595,8 +894,6 @@ function draw() {
   // Draw our cottage model
   gl.drawArrays(gl.TRIANGLES, 0, g_cottageMesh.length / 3)
 
-  // Trees have been removed
-
   // Draw clouds with texture
   let cloudVertexOffset = g_cottageMesh.length / 3
 
@@ -625,8 +922,6 @@ function draw() {
 
     // Use texture for clouds instead of flat lighting
     gl.uniform1i(g_u_flatlighting_ref, false)
-    // gl.uniform3fv(g_u_flatcolor_ref, [1,1,1])
-
 
     // Draw the cloud model
     gl.drawArrays(gl.TRIANGLES, cloudVertexOffset, cloudMesh.length / 3)
@@ -668,6 +963,9 @@ function draw() {
   // Use the cube mesh for the light source
   const cubeOffset = cloudVertexOffset + g_gridMesh.length / 3
   gl.drawArrays(gl.TRIANGLES, cubeOffset, g_cubeMesh.length / 3)
+
+  // Draw fireflies after everything else
+  drawFireflies()
 }
 
 // Change the drawStars function to draw stars directly
@@ -920,4 +1218,3 @@ function setupVec(size, name, stride, offset) {
 // Send to HTML
 
 window.main = main
-
