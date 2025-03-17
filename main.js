@@ -202,11 +202,11 @@ async function loadOBJFiles() {
 
   // Load cloud models from the new path
   const cloudFiles = [
-    "./resources/clouds/altostratus00.obj",
-    "./resources/clouds/altostratus01.obj",
-    "./resources/clouds/cumulus00.obj",
-    "./resources/clouds/cumulus01.obj",
-    "./resources/clouds/cumulus02.obj",
+    "./resources/cloudOBJ/CloudCollection.obj",
+    "./resources/cloudOBJ/CloudCollection.obj",
+    "./resources/cloudOBJ/CloudCollection.obj",
+    "./resources/cloudOBJ/CloudCollection.obj",
+    "./resources/cloudOBJ/CloudCollection.obj",
   ]
 
   // Clear previous cloud data
@@ -227,106 +227,13 @@ async function loadOBJFiles() {
 
     // Ensure normals are properly set for smooth shading
     // If the model doesn't have enough normals, we'll generate smooth normals
-    if (cloudNormals.length < cloudMesh.length) {
-      console.log(`Generating smooth normals for ${cloudFile}`)
-      const smoothNormals = generateSmoothNormals(cloudMesh)
-      g_cloudNormals.push(smoothNormals)
-    } else {
-      g_cloudNormals.push(cloudNormals)
-    }
-
+   
+    g_cloudNormals.push(cloudNormals)
     g_cloudMeshes.push(cloudMesh)
     g_cloudTexCoords.push(cloudTexCoords)
   }
 
   startRendering()
-}
-
-// Add a function to generate simple texture coordinates for models that don't have them
-function generateSimpleTexCoords(mesh, texCoords) {
-  const vertexCount = mesh.length / 3
-
-  for (let i = 0; i < vertexCount; i++) {
-    // Get the vertex position
-    const x = mesh[i * 3]
-    const y = mesh[i * 3 + 1]
-    const z = mesh[i * 3 + 2]
-
-    // Generate simple texture coordinates based on position
-    // This is a simple mapping that might work for tree-like objects
-    // For better results, you might need a more sophisticated approach
-    const u = Math.atan2(z, x) / (2 * Math.PI) + 0.5 // Map angle to [0,1]
-    const v = (y + 1) / 2 // Map height to [0,1] assuming y is in [-1,1]
-
-    texCoords.push(u, v)
-  }
-}
-
-// Add a function to generate smooth normals for cloud meshes
-function generateSmoothNormals(mesh) {
-  const normals = []
-  const vertexCount = mesh.length / 3
-
-  // Create a map to store accumulated normals for each vertex position
-  const vertexNormals = new Map()
-
-  // Process each triangle
-  for (let i = 0; i < vertexCount; i += 3) {
-    // Get the three vertices of the triangle
-    const v1 = [mesh[i * 3], mesh[i * 3 + 1], mesh[i * 3 + 2]]
-    const v2 = [mesh[(i + 1) * 3], mesh[(i + 1) * 3 + 1], mesh[(i + 1) * 3 + 2]]
-    const v3 = [mesh[(i + 2) * 3], mesh[(i + 2) * 3 + 1], mesh[(i + 2) * 3 + 2]]
-
-    // Calculate the face normal using cross product
-    const edge1 = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]]
-    const edge2 = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]]
-    const normal = [
-      edge1[1] * edge2[2] - edge1[2] * edge2[1],
-      edge1[2] * edge2[0] - edge1[0] * edge2[2],
-      edge1[0] * edge2[1] - edge1[1] * edge2[0],
-    ]
-
-    // Normalize the normal
-    const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
-    if (length > 0) {
-      normal[0] /= length
-      normal[1] /= length
-      normal[2] /= length
-    }
-
-    // Add this normal to each vertex of the triangle
-    for (let j = 0; j < 3; j++) {
-      const vertexKey = `${mesh[(i + j) * 3]},${mesh[(i + j) * 3 + 1]},${mesh[(i + j) * 3 + 2]}`
-      if (!vertexNormals.has(vertexKey)) {
-        vertexNormals.set(vertexKey, [normal[0], normal[1], normal[2]])
-      } else {
-        const existingNormal = vertexNormals.get(vertexKey)
-        existingNormal[0] += normal[0]
-        existingNormal[1] += normal[1]
-        existingNormal[2] += normal[2]
-        vertexNormals.set(vertexKey, existingNormal)
-      }
-    }
-  }
-
-  // Normalize all accumulated normals
-  for (const [key, normal] of vertexNormals.entries()) {
-    const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2])
-    if (length > 0) {
-      normal[0] /= length
-      normal[1] /= length
-      normal[2] /= length
-    }
-  }
-
-  // Create the final normals array in the same order as the vertices
-  for (let i = 0; i < vertexCount; i++) {
-    const vertexKey = `${mesh[i * 3]},${mesh[i * 3 + 1]},${mesh[i * 3 + 2]}`
-    const normal = vertexNormals.get(vertexKey) || [0, 1, 0] // Default to up if not found
-    normals.push(normal[0], normal[1], normal[2])
-  }
-
-  return normals
 }
 
 // Update the startRendering function to use the loaded normals and texture coordinates
@@ -717,8 +624,8 @@ function draw() {
     gl.uniformMatrix4fv(g_u_inversetranspose_ref, false, cloudInverseTranspose.elements)
 
     // Use texture for clouds instead of flat lighting
-    gl.uniform1i(g_u_flatlighting_ref, true)
-    gl.uniform3fv(g_u_flatcolor_ref, [1,1,1])
+    gl.uniform1i(g_u_flatlighting_ref, false)
+    // gl.uniform3fv(g_u_flatcolor_ref, [1,1,1])
 
 
     // Draw the cloud model
