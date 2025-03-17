@@ -717,7 +717,9 @@ function draw() {
     gl.uniformMatrix4fv(g_u_inversetranspose_ref, false, cloudInverseTranspose.elements)
 
     // Use texture for clouds instead of flat lighting
-    gl.uniform1i(g_u_flatlighting_ref, false)
+    gl.uniform1i(g_u_flatlighting_ref, true)
+    gl.uniform3fv(g_u_flatcolor_ref, [1,1,1])
+
 
     // Draw the cloud model
     gl.drawArrays(gl.TRIANGLES, cloudVertexOffset, cloudMesh.length / 3)
