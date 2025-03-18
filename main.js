@@ -98,6 +98,9 @@ var g_fireflySize = 0.03 // Smaller size
 var g_fireflyIntensity = 0.8 // Less intense
 var g_fireflyLights = [] // Will store light positions and colors
 
+// Add this global variable near the other global variables
+var g_lightEnabled = true
+
 ///// extras
 var slider_input
 var label
@@ -136,6 +139,12 @@ function main() {
 
   // We will call this at the end of most main functions from now on
   loadImageFiles()
+
+  // Add this to the main() function after the other event listeners
+  const lightToggle = document.getElementById("toggleLight")
+  lightToggle.addEventListener("change", (event) => {
+    g_lightEnabled = event.target.checked
+  })
 }
 
 // Function to convert any image to a power-of-two sized texture
@@ -246,7 +255,7 @@ async function loadOBJFiles() {
     g_cloudNormals.push(cloudNormals)
     g_cloudMeshes.push(cloudMesh)
     g_cloudTexCoords.push(cloudTexCoords)
-    
+
     // Duplicate each cloud model with slight variations to create more clouds
     // without loading additional models
     for (let i = 0; i < 5; i++) {
@@ -254,7 +263,7 @@ async function loadOBJFiles() {
       const modifiedMesh = [...cloudMesh]
       const modifiedNormals = [...cloudNormals]
       const modifiedTexCoords = [...cloudTexCoords]
-      
+
       g_cloudNormals.push(modifiedNormals)
       g_cloudMeshes.push(modifiedMesh)
       g_cloudTexCoords.push(modifiedTexCoords)
@@ -584,147 +593,78 @@ function setupCloudMatrices() {
       .translate(-3, 6, -3)
       .scale(0.05, 0.03, 0.05)
       .rotate(30, 0, 1, 0),
-    new Matrix4()
-      .translate(2, 6.5, -2)
-      .scale(0.06, 0.04, 0.06)
-      .rotate(60, 0, 1, 0),
-    new Matrix4()
-      .translate(0, 7, -4)
-      .scale(0.07, 0.05, 0.07)
-      .rotate(15, 0, 1, 0),
-    new Matrix4()
-      .translate(-4, 7.2, -5)
-      .scale(0.08, 0.03, 0.06)
-      .rotate(45, 0, 1, 0),
-    new Matrix4()
-      .translate(4, 6.8, -3)
-      .scale(0.05, 0.03, 0.05)
-      .rotate(75, 0, 1, 0),
-    
+    new Matrix4().translate(2, 6.5, -2).scale(0.06, 0.04, 0.06).rotate(60, 0, 1, 0),
+    new Matrix4().translate(0, 7, -4).scale(0.07, 0.05, 0.07).rotate(15, 0, 1, 0),
+    new Matrix4().translate(-4, 7.2, -5).scale(0.08, 0.03, 0.06).rotate(45, 0, 1, 0),
+    new Matrix4().translate(4, 6.8, -3).scale(0.05, 0.03, 0.05).rotate(75, 0, 1, 0),
+
     // Additional clouds for more coverage
     new Matrix4()
       .translate(1, 7.5, -2.5)
       .scale(0.06, 0.04, 0.06)
       .rotate(20, 0, 1, 0),
-    new Matrix4()
-      .translate(-2, 8, -4)
-      .scale(0.07, 0.05, 0.07)
-      .rotate(50, 0, 1, 0),
-    new Matrix4()
-      .translate(3, 7.8, -5)
-      .scale(0.5, 0.03, 0.05)
-      .rotate(10, 0, 1, 0),
-    new Matrix4()
-      .translate(-3, 8.2, -2)
-      .scale(0.6, 0.4, 0.6)
-      .rotate(35, 0, 1, 0),
-    new Matrix4()
-      .translate(0, 9, -6)
-      .scale(0.9, 0.4, 0.9)
-      .rotate(25, 0, 1, 0),
-    new Matrix4()
-      .translate(-5, 8.5, -3)
-      .scale(0.8, 0.3, 0.8)
-      .rotate(65, 0, 1, 0),
-      
+    new Matrix4().translate(-2, 8, -4).scale(0.07, 0.05, 0.07).rotate(50, 0, 1, 0),
+    new Matrix4().translate(3, 7.8, -5).scale(0.5, 0.03, 0.05).rotate(10, 0, 1, 0),
+    new Matrix4().translate(-3, 8.2, -2).scale(0.6, 0.4, 0.6).rotate(35, 0, 1, 0),
+    new Matrix4().translate(0, 9, -6).scale(0.9, 0.4, 0.9).rotate(25, 0, 1, 0),
+    new Matrix4().translate(-5, 8.5, -3).scale(0.8, 0.3, 0.8).rotate(65, 0, 1, 0),
+
     // NEW CLOUDS - adding many more clouds as requested
     // Lower altitude clouds
     new Matrix4()
       .translate(-7, 5.5, -4)
       .scale(0.7, 0.3, 0.7)
       .rotate(15, 0, 1, 0),
-    new Matrix4()
-      .translate(6, 5.8, -6)
-      .scale(0.6, 0.25, 0.6)
-      .rotate(40, 0, 1, 0),
-    new Matrix4()
-      .translate(2, 6.2, -8)
-      .scale(0.8, 0.35, 0.8)
-      .rotate(70, 0, 1, 0),
-    
+    new Matrix4().translate(6, 5.8, -6).scale(0.6, 0.25, 0.6).rotate(40, 0, 1, 0),
+    new Matrix4().translate(2, 6.2, -8).scale(0.8, 0.35, 0.8).rotate(70, 0, 1, 0),
+
     // Mid altitude clouds
     new Matrix4()
       .translate(-6, 7.5, -5)
       .scale(0.9, 0.4, 0.9)
       .rotate(25, 0, 1, 0),
-    new Matrix4()
-      .translate(5, 7.2, -3)
-      .scale(0.7, 0.3, 0.7)
-      .rotate(55, 0, 1, 0),
-    new Matrix4()
-      .translate(0, 7.8, -7)
-      .scale(0.85, 0.35, 0.85)
-      .rotate(10, 0, 1, 0),
-    
+    new Matrix4().translate(5, 7.2, -3).scale(0.7, 0.3, 0.7).rotate(55, 0, 1, 0),
+    new Matrix4().translate(0, 7.8, -7).scale(0.85, 0.35, 0.85).rotate(10, 0, 1, 0),
+
     // Higher altitude clouds
     new Matrix4()
       .translate(-4, 9.5, -2)
       .scale(1.0, 0.45, 1.0)
       .rotate(30, 0, 1, 0),
-    new Matrix4()
-      .translate(3, 9.2, -4)
-      .scale(0.9, 0.4, 0.9)
-      .rotate(60, 0, 1, 0),
-    new Matrix4()
-      .translate(-2, 9.8, -6)
-      .scale(1.1, 0.5, 1.1)
-      .rotate(20, 0, 1, 0),
-    
+    new Matrix4().translate(3, 9.2, -4).scale(0.9, 0.4, 0.9).rotate(60, 0, 1, 0),
+    new Matrix4().translate(-2, 9.8, -6).scale(1.1, 0.5, 1.1).rotate(20, 0, 1, 0),
+
     // Distant clouds
     new Matrix4()
       .translate(-8, 8.5, -10)
       .scale(1.2, 0.5, 1.2)
       .rotate(45, 0, 1, 0),
-    new Matrix4()
-      .translate(7, 8.8, -12)
-      .scale(1.3, 0.55, 1.3)
-      .rotate(15, 0, 1, 0),
-    new Matrix4()
-      .translate(0, 9.0, -15)
-      .scale(1.4, 0.6, 1.4)
-      .rotate(30, 0, 1, 0),
-    
+    new Matrix4().translate(7, 8.8, -12).scale(1.3, 0.55, 1.3).rotate(15, 0, 1, 0),
+    new Matrix4().translate(0, 9.0, -15).scale(1.4, 0.6, 1.4).rotate(30, 0, 1, 0),
+
     // Cloud clusters
     new Matrix4()
       .translate(-5, 7.0, -8)
       .scale(0.7, 0.3, 0.7)
       .rotate(25, 0, 1, 0),
-    new Matrix4()
-      .translate(-5.5, 7.5, -8.5)
-      .scale(0.6, 0.25, 0.6)
-      .rotate(40, 0, 1, 0),
-    new Matrix4()
-      .translate(-4.5, 7.2, -7.5)
-      .scale(0.8, 0.35, 0.8)
-      .rotate(10, 0, 1, 0),
-    
+    new Matrix4().translate(-5.5, 7.5, -8.5).scale(0.6, 0.25, 0.6).rotate(40, 0, 1, 0),
+    new Matrix4().translate(-4.5, 7.2, -7.5).scale(0.8, 0.35, 0.8).rotate(10, 0, 1, 0),
+
     // Another cloud cluster
     new Matrix4()
       .translate(4, 8.0, -6)
       .scale(0.75, 0.3, 0.75)
       .rotate(35, 0, 1, 0),
-    new Matrix4()
-      .translate(4.5, 8.3, -6.5)
-      .scale(0.65, 0.25, 0.65)
-      .rotate(50, 0, 1, 0),
-    new Matrix4()
-      .translate(3.5, 7.8, -5.5)
-      .scale(0.85, 0.35,  0.25, 0.65)
-      .rotate(50, 0, 1, 0),
-    new Matrix4()
-      .translate(3.5, 7.8, -5.5)
-      .scale(0.85, 0.35, 0.85)
-      .rotate(20, 0, 1, 0),
-      
+    new Matrix4().translate(4.5, 8.3, -6.5).scale(0.65, 0.25, 0.65).rotate(50, 0, 1, 0),
+    new Matrix4().translate(3.5, 7.8, -5.5).scale(0.85, 0.35, 0.25, 0.65).rotate(50, 0, 1, 0),
+    new Matrix4().translate(3.5, 7.8, -5.5).scale(0.85, 0.35, 0.85).rotate(20, 0, 1, 0),
+
     // Scattered clouds
     new Matrix4()
       .translate(-7, 6.5, -9)
       .scale(0.7, 0.3, 0.7)
       .rotate(35, 0, 1, 0),
-    new Matrix4()
-      .translate(6, 7.5, -10)
-      .scale(0.8, 0.35, 0.8)
-      .rotate(55, 0, 1, 0),
+    new Matrix4().translate(6, 7.5, -10).scale(0.8, 0.35, 0.8).rotate(55, 0, 1, 0),
   ]
 }
 
@@ -794,12 +734,12 @@ function tick() {
     const cloudSpeed = 0.00005 * ((i % 5) + 1) // More varied speeds
     const verticalSpeed = 0.00002 * ((i % 4) + 1)
     const oscillationFactor = 0.001 * ((i % 3) + 1)
-    
+
     // Create more complex movement patterns
     const horizontalMovement = Math.sin(current_time * cloudSpeed) * oscillationFactor
     const verticalMovement = Math.sin(current_time * verticalSpeed) * (oscillationFactor * 0.5)
     const depthMovement = Math.cos(current_time * cloudSpeed * 0.7) * (oscillationFactor * 0.3)
-    
+
     // Apply the movement
     g_cloudMatrices[i] = new Matrix4()
       .translate(horizontalMovement, verticalMovement, depthMovement)
@@ -883,7 +823,7 @@ function draw() {
   gl.uniform1i(g_u_flatlighting_ref, false)
 
   // Update with our light position to be behind the camera
-  gl.uniform3fv(g_u_light_ref, new Float32Array(g_lightPosition))
+  gl.uniform3fv(g_u_light_ref, new Float32Array(g_lightEnabled ? g_lightPosition : [0, 0, 0]))
 
   // Update our spec power
   gl.uniform1f(g_u_specpower_ref, g_specPower)
@@ -955,14 +895,16 @@ function draw() {
   // Draw the grid as triangles
   gl.drawArrays(gl.TRIANGLES, cloudVertexOffset, g_gridMesh.length / 3)
 
-  // draw the light source as a white cube
-  gl.uniform3fv(g_u_flatcolor_ref, [1, 1, 1])
-  gl.uniformMatrix4fv(g_u_model_ref, false, new Matrix4().scale(0.1, 0.1, 0.1).elements)
-  gl.uniformMatrix4fv(g_u_world_ref, false, new Matrix4().translate(...g_lightPosition).elements)
-  gl.uniform1i(g_u_flatlighting_ref, true)
-  // Use the cube mesh for the light source
-  const cubeOffset = cloudVertexOffset + g_gridMesh.length / 3
-  gl.drawArrays(gl.TRIANGLES, cubeOffset, g_cubeMesh.length / 3)
+  // Draw the light source cube only if light is enabled
+  if (g_lightEnabled) {
+    gl.uniform3fv(g_u_flatcolor_ref, [1, 1, 1])
+    gl.uniformMatrix4fv(g_u_model_ref, false, new Matrix4().scale(0.1, 0.1, 0.1).elements)
+    gl.uniformMatrix4fv(g_u_world_ref, false, new Matrix4().translate(...g_lightPosition).elements)
+    gl.uniform1i(g_u_flatlighting_ref, true)
+    // Use the cube mesh for the light source
+    const cubeOffset = cloudVertexOffset + g_gridMesh.length / 3
+    gl.drawArrays(gl.TRIANGLES, cubeOffset, g_cubeMesh.length / 3)
+  }
 
   // Draw fireflies after everything else
   drawFireflies()
@@ -1218,3 +1160,4 @@ function setupVec(size, name, stride, offset) {
 // Send to HTML
 
 window.main = main
+
