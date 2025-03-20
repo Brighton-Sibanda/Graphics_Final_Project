@@ -1,0 +1,83 @@
+<!-- Last edited by Brighton Sibanda 2025 -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<header>
+    <!-- Sets an icon for the page -->
+    <link rel="icon" type="image/x-icon" href="/resources/favicon.ico">
+</header>
+
+<body onload="main()">
+    <!-- WebGL Utility Scripts -->
+    <script src="lib/webgl-utils.js"></script>
+    <script src="lib/webgl-debug.js"></script>
+    <script src="lib/cuon-utils.js"></script>
+    <script src="lib/cuon-matrix-quat03.js"></script>
+
+    <!-- Select a JavaScript file -->
+    <script type="module" src="main.js"></script>
+
+    <!-- Main content using a simple table layout -->
+    <table>
+        <tr>
+            <td style="vertical-align: top;">
+                <!-- Canvas on the left -->
+                <canvas id="canvas" width="800" height="800">
+                    Please use a browser that supports "canvas"
+                </canvas>
+            </td>
+            <td style="vertical-align: top; padding-left: 20px;">
+                <!-- Instructions and controls on the right -->
+                <div>
+                    <!-- Project Description -->
+                    <h2>Twilight Departure: From a cozy cottage into the Cosmos</h2>
+                    <p>My model contains a cottage, stars, fireflies, and a spaceship.</p>
+                    
+                    <h3>Usage Instructions:</h3>
+                    <ul>
+                        <li><strong>Camera Controls:</strong> Use WASD to move forward/backward/left/right, R to go up, and F to go down</li>
+                        <li><strong>Light Controls:</strong> Use the sliders below to adjust the light position and properties</li>
+                        <li><strong>White Light:</strong> Toggle the checkbox to enable/disable the white light source</li>
+                        <li><strong>Spaceship:</strong> Click the Launch button to send the spaceship into space!</li>
+                    </ul>
+
+                    <!-- Light Controls -->
+                    <h3>Light Position Controls</h3>
+                    <div>
+                        <input type="range" id="sliderX" min="-4" max="4" step=".01" value="0"/>
+                        <label id="lightX" for="sliderX"></label>
+                    </div>
+                    <div>
+                        <input type="range" id="sliderY" min="-4" max="4" step=".01" value="0"/>
+                        <label id="lightY" for="sliderY"></label>
+                    </div>
+                    <div>
+                        <input type="range" id="sliderZ" min="-4" max="4" step=".01" value="2"/>
+                        <label id="lightZ" for="sliderZ"></label>
+                    </div>
+
+                    <!-- Specular Power Control -->
+                    <div>
+                        <input type="range" id="sliderPower" min="1" max="32" step="1" value="16"/>
+                        <label id="specPower" for="sliderPower"></label>
+                    </div>
+
+                    <!-- Light Toggle -->
+                    <div>
+                        <input type="checkbox" id="toggleLight"/>
+                        <label for="toggleLight">Enable White Light</label>
+                    </div>
+
+                    <!-- Spaceship Launch Button -->
+                    <div style="margin-top: 20px;">
+                        <button id="launchButton" style="padding: 10px 20px; background-color: #ff4500; color: white; border: none; border-radius: 5px; cursor: pointer;">Launch Spaceship</button>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>
+

@@ -89,7 +89,7 @@ void main() {
             specular = max(pow(angle, u_SpecPower), 0.0);
         }
 
-        vec3 specularColor = vec3(1.0, 1.0, 1.0);
+        vec3 specularColor = vec3(0.8, 0.8, 0.8);
 
         // texture color
         float u_Ambient = 0.1;
